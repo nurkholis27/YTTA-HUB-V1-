@@ -1,0 +1,244 @@
+--// HUTAN V2 BY KHOLIS (FINAL MOBILE + TURBO)
+
+-- SERVICES
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
+
+-- REMOTE
+local FishCaught = ReplicatedStorage
+	:WaitForChild("FishingEvents")
+	:WaitForChild("FishCaught")
+
+-- VAR
+local running = false
+local minimized = false
+
+-- SPEED SYSTEM (1 - 10)
+local speed = 5
+local minSpeed, maxSpeed = 1, 10
+local delayTime = 0.1
+
+-- TURBO
+local turboRunning = false
+local turboDelay = 0.1
+
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "HUTAN_V2_BY_KHOLIS"
+gui.ResetOnSpawn = false
+gui.Parent = game.CoreGui
+
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.new(0,210,0,155)
+main.Position = UDim2.new(0.5,-105,0.5,-80)
+main.BackgroundColor3 = Color3.fromRGB(15,15,20)
+main.BorderSizePixel = 0
+Instance.new("UICorner", main).CornerRadius = UDim.new(0,10)
+
+-- DRAG (MOBILE + PC)
+local dragging = false
+local dragStart, startPos
+
+local function beginDrag(input)
+	dragging = true
+	dragStart = input.Position
+	startPos = main.Position
+end
+
+local function endDrag()
+	dragging = false
+end
+
+main.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch
+	or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		beginDrag(input)
+	end
+end)
+
+main.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch
+	or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		endDrag()
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.Touch
+	or input.UserInputType == Enum.UserInputType.MouseMovement) then
+		local delta = input.Position - dragStart
+		main.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
+	end
+end)
+
+-- TITLE
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.new(1,-34,0,30)
+title.Position = UDim2.new(0,8,0,0)
+title.BackgroundTransparency = 1
+title.Text = "HUTAN V2 BY KHOLIS"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 13
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.TextColor3 = Color3.fromRGB(0,255,140)
+
+-- MINIMIZE
+local minBtn = Instance.new("TextButton", main)
+minBtn.Size = UDim2.new(0,26,0,26)
+minBtn.Position = UDim2.new(1,-30,0,2)
+minBtn.Text = "—"
+minBtn.Font = Enum.Font.GothamBold
+minBtn.TextSize = 18
+minBtn.BackgroundColor3 = Color3.fromRGB(35,35,45)
+minBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", minBtn).CornerRadius = UDim.new(0,6)
+
+-- CONTENT
+local content = Instance.new("Frame", main)
+content.Position = UDim2.new(0,0,0,30)
+content.Size = UDim2.new(1,0,1,-30)
+content.BackgroundTransparency = 1
+
+-- STATUS
+local status = Instance.new("TextLabel", content)
+status.Size = UDim2.new(1,0,0,18)
+status.BackgroundTransparency = 1
+status.Text = "● OFF"
+status.Font = Enum.Font.Gotham
+status.TextSize = 11
+status.TextColor3 = Color3.fromRGB(255,80,80)
+
+-- TOGGLE
+local toggle = Instance.new("TextButton", content)
+toggle.Position = UDim2.new(0.1,0,0.25,0)
+toggle.Size = UDim2.new(0.8,0,0,30)
+toggle.Text = "START"
+toggle.Font = Enum.Font.GothamBold
+toggle.TextSize = 14
+toggle.BackgroundColor3 = Color3.fromRGB(30,30,40)
+toggle.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", toggle).CornerRadius = UDim.new(0,8)
+
+-- SPEED LABEL
+local speedLabel = Instance.new("TextLabel", content)
+speedLabel.Position = UDim2.new(0,0,0.55,0)
+speedLabel.Size = UDim2.new(1,0,0,16)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextSize = 11
+speedLabel.TextColor3 = Color3.fromRGB(200,200,200)
+
+-- BUTTONS
+local minus = Instance.new("TextButton", content)
+minus.Position = UDim2.new(0.25,0,0.75,0)
+minus.Size = UDim2.new(0,40,0,28)
+minus.Text = "−"
+minus.Font = Enum.Font.GothamBold
+minus.TextSize = 20
+minus.BackgroundColor3 = Color3.fromRGB(60,20,20)
+minus.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", minus).CornerRadius = UDim.new(0,8)
+
+local plus = Instance.new("TextButton", content)
+plus.Position = UDim2.new(0.6,0,0.75,0)
+plus.Size = UDim2.new(0,40,0,28)
+plus.Text = "+"
+plus.Font = Enum.Font.GothamBold
+plus.TextSize = 20
+plus.BackgroundColor3 = Color3.fromRGB(20,60,20)
+plus.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", plus).CornerRadius = UDim.new(0,8)
+
+-- FUNCTIONS
+local function updateSpeed()
+	delayTime = math.clamp(0.22 - (speed * 0.02), 0.02, 0.2)
+	speedLabel.Text = "Speed: "..speed
+end
+
+-- TURBO
+local function startTurbo()
+	if turboRunning then return end
+	turboRunning = true
+	task.spawn(function()
+		while turboRunning do
+			speed = math.min(maxSpeed, speed + 1)
+			updateSpeed()
+			if speed >= maxSpeed then
+				turboRunning = false
+				break
+			end
+			task.wait(turboDelay)
+		end
+	end)
+end
+
+local function stopTurbo()
+	turboRunning = false
+end
+
+-- MINIMIZE LOGIC
+minBtn.Activated:Connect(function()
+	minimized = not minimized
+	content.Visible = not minimized
+	main.Size = minimized and UDim2.new(0,210,0,34) or UDim2.new(0,210,0,155)
+	minBtn.Text = minimized and "+" or "—"
+end)
+
+-- TOGGLE LOGIC
+toggle.Activated:Connect(function()
+	running = not running
+	if running then
+		status.Text = "● ON"
+		status.TextColor3 = Color3.fromRGB(0,255,140)
+		toggle.Text = "STOP"
+		task.spawn(function()
+			while running do
+				pcall(function()
+					FishCaught:FireServer()
+				end)
+				task.wait(delayTime)
+			end
+		end)
+	else
+		status.Text = "● OFF"
+		status.TextColor3 = Color3.fromRGB(255,80,80)
+		toggle.Text = "START"
+	end
+end)
+
+-- SPEED BUTTONS
+minus.Activated:Connect(function()
+	speed = math.max(minSpeed, speed - 1)
+	updateSpeed()
+end)
+
+plus.Activated:Connect(function()
+	speed = math.min(maxSpeed, speed + 1)
+	updateSpeed()
+end)
+
+-- TURBO HOLD
+plus.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch
+	or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		plus.BackgroundColor3 = Color3.fromRGB(0,120,0)
+		startTurbo()
+	end
+end)
+
+plus.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch
+	or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		plus.BackgroundColor3 = Color3.fromRGB(20,60,20)
+		stopTurbo()
+	end
+end)
+
+-- INIT
+updateSpeed()
