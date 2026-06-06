@@ -1,0 +1,526 @@
+-- LocalScript (StarterPlayerScripts atau StarterGui)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local fishingEvents = ReplicatedStorage:WaitForChild("FishingEvents")
+local fishCaughtEvent = fishingEvents:WaitForChild("FishCaught")
+
+-- ##### AUTO-SCALE CONFIGURATION #####
+local REFERENCE_WIDTH = 1920
+local REFERENCE_HEIGHT = 1080
+local scaleFactor = math.min(
+    player:GetMouse().ViewSizeX / REFERENCE_WIDTH,
+    player:GetMouse().ViewSizeY / REFERENCE_HEIGHT
+)
+
+local function scale(value)
+    return math.floor(value * scaleFactor)
+end
+
+-- ##### LARGE DIMENSIONS #####
+local GUI_WIDTH = scale(500)           -- Lebar besar
+local GUI_HEIGHT = scale(540)          -- Tinggi besar
+local GUI_MINIMIZED_HEIGHT = scale(45)
+local TITLE_BAR_HEIGHT = scale(50)
+local BUTTON_HEIGHT = scale(60)
+local SMALL_BUTTON_HEIGHT = scale(45)
+local PADDING = scale(15)
+local MARGIN = scale(10)
+
+-- Font sizes
+local FONT_SIZE_TITLE = scale(18)
+local FONT_SIZE_BUTTON = scale(20)
+local FONT_SIZE_SMALL = scale(16)
+local FONT_SIZE_STATUS = scale(14)
+local FONT_SIZE_INFO = scale(12)
+local FONT_SIZE_SPEED = scale(14)
+
+-- ##### VARIABLES #####
+local systemEnabled = true
+local autoActive = false
+local FIXED_SPEED = 0.05
+local minimized = false
+local autoTask = nil
+
+-- ##### DRAG VARIABLES #####
+local dragging = false
+local dragStartPosition = nil
+local dragStartMousePosition = nil
+local dragBounds = {
+    minX = -scale(1000),
+    maxX = scale(1000),
+    minY = -scale(700),
+    maxY = scale(700)
+}
+local DRAG_THRESHOLD = 3
+
+-- ##### GUI CREATION #####
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FishingGUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, GUI_WIDTH, 0, GUI_HEIGHT)
+mainFrame.Position = UDim2.new(0.5, -GUI_WIDTH/2, 0.5, -GUI_HEIGHT/2)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+mainFrame.BackgroundTransparency = 0.08
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+
+local corners = Instance.new("UICorner")
+corners.CornerRadius = UDim.new(0, scale(12))
+corners.Parent = mainFrame
+
+local shadow = Instance.new("UIShadow")
+shadow.Parent = mainFrame
+
+-- Title bar (drag area - enlarged)
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, TITLE_BAR_HEIGHT)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+titleBar.BackgroundTransparency = 0.3
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+
+local titleBarCorners = Instance.new("UICorner")
+titleBarCorners.CornerRadius = UDim.new(0, scale(12))
+titleBarCorners.Parent = titleBar
+
+-- Title text
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(0.7, 0, 1, 0)
+titleLabel.Position = UDim2.new(0, PADDING, 0, 0)
+titleLabel.Text = "🐟 AUTOMATIC FISH"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = FONT_SIZE_TITLE
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = titleBar
+
+-- Minimize button
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.new(0, scale(35), 1, -MARGIN)
+minBtn.Position = UDim2.new(1, -scale(75), 0, MARGIN/2)
+minBtn.Text = "−"
+minBtn.TextColor3 = Color3.fromRGB(255, 200, 100)
+minBtn.BackgroundTransparency = 1
+minBtn.Font = Enum.Font.GothamBold
+minBtn.TextSize = scale(24)
+minBtn.AutoButtonColor = false
+minBtn.Parent = titleBar
+
+-- Close button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, scale(35), 1, -MARGIN)
+closeBtn.Position = UDim2.new(1, -scale(40), 0, MARGIN/2)
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = scale(20)
+closeBtn.AutoButtonColor = false
+closeBtn.Parent = titleBar
+
+-- Content container
+local contentContainer = Instance.new("Frame")
+contentContainer.Size = UDim2.new(1, 0, 1, -TITLE_BAR_HEIGHT)
+contentContainer.Position = UDim2.new(0, 0, 0, TITLE_BAR_HEIGHT)
+contentContainer.BackgroundTransparency = 1
+contentContainer.Parent = mainFrame
+
+-- ##### STATUS INDICATOR #####
+local statusIndicator = Instance.new("Frame")
+statusIndicator.Size = UDim2.new(0, scale(14), 0, scale(14))
+statusIndicator.Position = UDim2.new(0, PADDING, 0, PADDING)
+statusIndicator.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+statusIndicator.BorderSizePixel = 0
+statusIndicator.Parent = contentContainer
+
+local indicatorCorner = Instance.new("UICorner")
+indicatorCorner.CornerRadius = UDim.new(1, 0)
+indicatorCorner.Parent = statusIndicator
+
+local statusText = Instance.new("TextLabel")
+statusText.Size = UDim2.new(0.8, 0, 0, scale(28))
+statusText.Position = UDim2.new(0, scale(30), 0, MARGIN)
+statusText.Text = "ACTIVE"
+statusText.TextColor3 = Color3.fromRGB(100, 255, 100)
+statusText.BackgroundTransparency = 1
+statusText.Font = Enum.Font.GothamBold
+statusText.TextSize = FONT_SIZE_STATUS
+statusText.TextXAlignment = Enum.TextXAlignment.Left
+statusText.Parent = contentContainer
+
+-- Divider
+local divider1 = Instance.new("Frame")
+divider1.Size = UDim2.new(0.9, 0, 0, 2)
+divider1.Position = UDim2.new(0.05, 0, 0, scale(45))
+divider1.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+divider1.BorderSizePixel = 0
+divider1.Parent = contentContainer
+
+-- Fish button (besar)
+local fishButton = Instance.new("TextButton")
+fishButton.Size = UDim2.new(0.85, 0, 0, BUTTON_HEIGHT)
+fishButton.Position = UDim2.new(0.075, 0, 0, scale(65))
+fishButton.Text = "🎣 CAST LINE"
+fishButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+fishButton.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+fishButton.Font = Enum.Font.GothamBold
+fishButton.TextSize = FONT_SIZE_BUTTON
+fishButton.Parent = contentContainer
+
+local fishCorners = Instance.new("UICorner")
+fishCorners.CornerRadius = UDim.new(0, scale(10))
+fishCorners.Parent = fishButton
+
+-- System toggle (besar)
+local systemToggle = Instance.new("TextButton")
+systemToggle.Size = UDim2.new(0.42, 0, 0, SMALL_BUTTON_HEIGHT)
+systemToggle.Position = UDim2.new(0.05, 0, 0, scale(140))
+systemToggle.Text = "🔘 SYSTEM: ON"
+systemToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+systemToggle.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+systemToggle.Font = Enum.Font.GothamBold
+systemToggle.TextSize = FONT_SIZE_SMALL
+systemToggle.Parent = contentContainer
+
+local sysCorners = Instance.new("UICorner")
+sysCorners.CornerRadius = UDim.new(0, scale(8))
+sysCorners.Parent = systemToggle
+
+-- Auto toggle (besar)
+local autoToggle = Instance.new("TextButton")
+autoToggle.Size = UDim2.new(0.42, 0, 0, SMALL_BUTTON_HEIGHT)
+autoToggle.Position = UDim2.new(0.53, 0, 0, scale(140))
+autoToggle.Text = "⏹ AUTO: OFF"
+autoToggle.TextColor3 = Color3.fromRGB(200, 200, 200)
+autoToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+autoToggle.Font = Enum.Font.Gotham
+autoToggle.TextSize = FONT_SIZE_SMALL
+autoToggle.Parent = contentContainer
+
+local autoCorners = Instance.new("UICorner")
+autoCorners.CornerRadius = UDim.new(0, scale(8))
+autoCorners.Parent = autoToggle
+
+-- Speed display section
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(0.9, 0, 0, scale(24))
+speedLabel.Position = UDim2.new(0.05, 0, 0, scale(200))
+speedLabel.Text = "⚡ CAST INTERVAL"
+speedLabel.TextColor3 = Color3.fromRGB(180, 180, 220)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Font = Enum.Font.GothamBold
+speedLabel.TextSize = FONT_SIZE_SMALL
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.Parent = contentContainer
+
+local speedValue = Instance.new("TextLabel")
+speedValue.Size = UDim2.new(0.8, 0, 0, scale(35))
+speedValue.Position = UDim2.new(0.1, 0, 0, scale(228))
+speedValue.Text = "0.05 SECOND"
+speedValue.TextColor3 = Color3.fromRGB(255, 200, 100)
+speedValue.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+speedValue.BackgroundTransparency = 0.5
+speedValue.Font = Enum.Font.GothamBold
+speedValue.TextSize = FONT_SIZE_SPEED
+speedValue.TextXAlignment = Enum.TextXAlignment.Center
+speedValue.Parent = contentContainer
+
+local speedValueCorners = Instance.new("UICorner")
+speedValueCorners.CornerRadius = UDim.new(0, scale(8))
+speedValueCorners.Parent = speedValue
+
+local maxSpeedLabel = Instance.new("TextLabel")
+maxSpeedLabel.Size = UDim2.new(0.8, 0, 0, scale(20))
+maxSpeedLabel.Position = UDim2.new(0.1, 0, 0, scale(268))
+maxSpeedLabel.Text = "(MAX SPEED — 20x PER DETIK)"
+maxSpeedLabel.TextColor3 = Color3.fromRGB(100, 200, 100)
+maxSpeedLabel.BackgroundTransparency = 1
+maxSpeedLabel.Font = Enum.Font.GothamBold
+maxSpeedLabel.TextSize = scale(11)
+maxSpeedLabel.TextXAlignment = Enum.TextXAlignment.Center
+maxSpeedLabel.Parent = contentContainer
+
+-- Divider
+local divider2 = Instance.new("Frame")
+divider2.Size = UDim2.new(0.9, 0, 0, 2)
+divider2.Position = UDim2.new(0.05, 0, 0, scale(300))
+divider2.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+divider2.BorderSizePixel = 0
+divider2.Parent = contentContainer
+
+-- Info display (besar)
+local infoText = Instance.new("TextLabel")
+infoText.Size = UDim2.new(0.9, 0, 0, scale(60))
+infoText.Position = UDim2.new(0.05, 0, 0, scale(315))
+infoText.Text = "📌 HOTKEY:\n[F] CAST LINE\n[G] HIDE/SHOW GUI\n[H] SYSTEM ON/OFF"
+infoText.TextColor3 = Color3.fromRGB(120, 120, 150)
+infoText.BackgroundTransparency = 1
+infoText.Font = Enum.Font.Gotham
+infoText.TextSize = FONT_SIZE_INFO
+infoText.TextXAlignment = Enum.TextXAlignment.Left
+infoText.TextYAlignment = Enum.TextYAlignment.Top
+infoText.Parent = contentContainer
+
+-- ##### DRAG FUNCTIONALITY (ENHANCED) #####
+local function canStartDrag()
+    return not minimized
+end
+
+local function getMousePosition()
+    return UserInputService:GetMouseLocation()
+end
+
+local function onInputBegan(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if not canStartDrag() then return end
+        
+        local mousePos = getMousePosition()
+        local frameAbsPos = mainFrame.AbsolutePosition
+        local frameSize = mainFrame.AbsoluteSize
+        
+        -- Check if click is within title bar
+        if mousePos.X >= frameAbsPos.X and mousePos.X <= frameAbsPos.X + frameSize.X and
+           mousePos.Y >= frameAbsPos.Y and mousePos.Y <= frameAbsPos.Y + TITLE_BAR_HEIGHT then
+            dragging = true
+            dragStartPosition = mainFrame.Position
+            dragStartMousePosition = mousePos
+            titleBar.BackgroundTransparency = 0.1
+        end
+    end
+end
+
+local function onInputChanged(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+        if not dragStartPosition or not dragStartMousePosition then return end
+        
+        local currentMousePos = getMousePosition()
+        local delta = currentMousePos - dragStartMousePosition
+        
+        local newXOffset = dragStartPosition.X.Offset + delta.X
+        local newYOffset = dragStartPosition.Y.Offset + delta.Y
+        
+        -- Apply bounds
+        newXOffset = math.clamp(newXOffset, dragBounds.minX, dragBounds.maxX)
+        newYOffset = math.clamp(newYOffset, dragBounds.minY, dragBounds.maxY)
+        
+        mainFrame.Position = UDim2.new(dragStartPosition.X.Scale, newXOffset, dragStartPosition.Y.Scale, newYOffset)
+    end
+end
+
+local function onInputEnded(input, gameProcessed)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+        dragStartPosition = nil
+        dragStartMousePosition = nil
+        titleBar.BackgroundTransparency = 0.3
+    end
+end
+
+UserInputService.InputBegan:Connect(onInputBegan)
+UserInputService.InputChanged:Connect(onInputChanged)
+UserInputService.InputEnded:Connect(onInputEnded)
+
+-- Touch support for mobile
+if UserInputService.TouchEnabled then
+    UserInputService.TouchStarted:Connect(function(touch, processed)
+        if processed then return end
+        if not canStartDrag() then return end
+        
+        local touchPoint = touch.Position
+        local frameAbsPos = mainFrame.AbsolutePosition
+        local frameSize = mainFrame.AbsoluteSize
+        
+        if touchPoint.X >= frameAbsPos.X and touchPoint.X <= frameAbsPos.X + frameSize.X and
+           touchPoint.Y >= frameAbsPos.Y and touchPoint.Y <= frameAbsPos.Y + TITLE_BAR_HEIGHT then
+            dragging = true
+            dragStartPosition = mainFrame.Position
+            dragStartMousePosition = touchPoint
+            titleBar.BackgroundTransparency = 0.1
+        end
+    end)
+    
+    UserInputService.TouchMoved:Connect(function(touch, processed)
+        if processed then return end
+        if dragging and dragStartPosition and dragStartMousePosition then
+            local currentPos = touch.Position
+            local delta = currentPos - dragStartMousePosition
+            
+            local newXOffset = dragStartPosition.X.Offset + delta.X
+            local newYOffset = dragStartPosition.Y.Offset + delta.Y
+            
+            newXOffset = math.clamp(newXOffset, dragBounds.minX, dragBounds.maxX)
+            newYOffset = math.clamp(newYOffset, dragBounds.minY, dragBounds.maxY)
+            
+            mainFrame.Position = UDim2.new(dragStartPosition.X.Scale, newXOffset, dragStartPosition.Y.Scale, newYOffset)
+        end
+    end)
+    
+    UserInputService.TouchEnded:Connect(function()
+        dragging = false
+        dragStartPosition = nil
+        dragStartMousePosition = nil
+        titleBar.BackgroundTransparency = 0.3
+    end)
+end
+
+-- ##### MINIMIZE FUNCTION #####
+local function minimize()
+    minimized = true
+    local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local goal = {Size = UDim2.new(0, GUI_WIDTH, 0, GUI_MINIMIZED_HEIGHT)}
+    local tween = TweenService:Create(mainFrame, tweenInfo, goal)
+    tween:Play()
+    contentContainer.Visible = false
+    minBtn.Text = "+"
+end
+
+local function maximize()
+    minimized = false
+    contentContainer.Visible = true
+    local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local goal = {Size = UDim2.new(0, GUI_WIDTH, 0, GUI_HEIGHT)}
+    local tween = TweenService:Create(mainFrame, tweenInfo, goal)
+    tween:Play()
+    minBtn.Text = "−"
+end
+
+minBtn.MouseButton1Click:Connect(function()
+    if minimized then
+        maximize()
+    else
+        minimize()
+    end
+end)
+
+-- ##### CLOSE FUNCTION #####
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui.Enabled = false
+end)
+
+-- ##### CORE FIRING FUNCTION (PRESERVED - TIDAK BERUBAH) #####
+local function fireFishCaught()
+    if not systemEnabled then return end
+    
+    -- Original code preserved exactly - NO CHANGES
+    game:GetService("ReplicatedStorage"):WaitForChild("FishingEvents"):WaitForChild("FishCaught"):FireServer()
+    
+    -- Visual feedback only
+    fishButton.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+    task.wait(0.05)
+    fishButton.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+end
+
+-- ##### AUTO-CAST LOGIC (PRESERVED) #####
+local function stopAutoCast()
+    if autoTask then
+        task.cancel(autoTask)
+        autoTask = nil
+    end
+end
+
+local function startAutoCast()
+    stopAutoCast()
+    autoTask = task.spawn(function()
+        while autoActive and systemEnabled do
+            fireFishCaught()
+            task.wait(FIXED_SPEED)
+        end
+        if not systemEnabled then
+            autoActive = false
+            autoToggle.Text = "⏹ AUTO: OFF"
+            autoToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+        end
+    end)
+end
+
+-- ##### SYSTEM TOGGLE (PRESERVED) #####
+local function setSystemState(enabled)
+    systemEnabled = enabled
+    if enabled then
+        systemToggle.Text = "🔘 SYSTEM: ON"
+        systemToggle.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+        statusIndicator.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+        statusText.Text = "ACTIVE"
+        statusText.TextColor3 = Color3.fromRGB(100, 255, 100)
+        fishButton.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+        fishButton.TextTransparency = 0
+        
+        if autoActive then
+            startAutoCast()
+        end
+    else
+        systemToggle.Text = "⚫ SYSTEM: OFF"
+        systemToggle.BackgroundColor3 = Color3.fromRGB(100, 60, 60)
+        statusIndicator.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+        statusText.Text = "OFF"
+        statusText.TextColor3 = Color3.fromRGB(255, 80, 80)
+        fishButton.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+        fishButton.TextTransparency = 0.4
+        stopAutoCast()
+    end
+end
+
+systemToggle.MouseButton1Click:Connect(function()
+    setSystemState(not systemEnabled)
+end)
+
+-- ##### AUTO TOGGLE (PRESERVED) #####
+autoToggle.MouseButton1Click:Connect(function()
+    if not systemEnabled then
+        autoToggle.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+        task.wait(0.15)
+        autoToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+        return
+    end
+    
+    autoActive = not autoActive
+    if autoActive then
+        autoToggle.Text = "▶ AUTO: ON"
+        autoToggle.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+        startAutoCast()
+    else
+        autoToggle.Text = "⏹ AUTO: OFF"
+        autoToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+        stopAutoCast()
+    end
+end)
+
+-- ##### MANUAL CAST (PRESERVED) #####
+fishButton.MouseButton1Click:Connect(function()
+    if systemEnabled then
+        fireFishCaught()
+    end
+end)
+
+-- ##### KEYBOARD HOTKEYS (PRESERVED) #####
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.F then
+        if systemEnabled then
+            fireFishCaught()
+        end
+    elseif input.KeyCode == Enum.KeyCode.G then
+        screenGui.Enabled = not screenGui.Enabled
+    elseif input.KeyCode == Enum.KeyCode.H then
+        setSystemState(not systemEnabled)
+    end
+end)
+
+-- ##### INITIALIZATION #####
+setSystemState(true)
