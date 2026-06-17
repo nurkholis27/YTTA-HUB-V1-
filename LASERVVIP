@@ -1,0 +1,531 @@
+-- ============================================================
+-- LASERBYKING — KEY SYSTEM MINI v1
+-- Owner: Mr. Kholis
+-- Keys: 7707 (Trial) | 7777 (Permanent)
+-- ============================================================
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- ============================================================
+-- KEY CONFIG — UBAH KEY DI SINI
+-- ============================================================
+local KEY_CONFIG = {
+    TRIAL = {
+        key = "7707",              -- KEY TRIAL
+        duration = 7,
+        color = Color3.fromRGB(72, 187, 204),
+        label = "⭐ TRIAL 7 Hari",
+        notif = "✅ KEY TRIAL 7 HARI VALID"
+    },
+    PERMANENT = {
+        key = "7777",              -- KEY PERMANEN
+        duration = math.huge,
+        color = Color3.fromRGB(255, 215, 0),
+        label = "👑 PERMANENT",
+        notif = "✅ KEY PERMANEN VALID"
+    }
+}
+
+-- ============================================================
+-- LICENSE STATE
+-- ============================================================
+local LicenseState = {
+    Valid = false,
+    Type = nil,
+    Expiry = nil,
+    ActivatedAt = nil
+}
+
+-- ============================================================
+-- LOADSTRING TARGET
+-- ============================================================
+local SCRIPT_URL = "https://raw.githubusercontent.com/nurkholis27/YTTA-HUB-V1-/refs/heads/main/Laserv2"
+
+-- ============================================================
+-- HELPER FUNCTIONS
+-- ============================================================
+local function getCoreGui()
+    return (gethui and gethui()) or CoreGui
+end
+
+local function showNotification(title, message, duration, color)
+    duration = duration or 3
+    color = color or Color3.fromRGB(72, 187, 204)
+    
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "MiniNotif_" .. math.random(1000, 9999)
+    gui.Parent = getCoreGui()
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 280, 0, 60)
+    frame.Position = UDim2.new(1, 300, 0.85, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    frame.BorderSizePixel = 0
+    frame.Parent = gui
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+    
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = color
+    stroke.Thickness = 1.5
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -16, 0, 18)
+    titleLabel.Position = UDim2.new(0, 8, 0, 6)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = title
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 11
+    titleLabel.TextColor3 = color
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = frame
+    
+    local msgLabel = Instance.new("TextLabel")
+    msgLabel.Size = UDim2.new(1, -16, 0, 28)
+    msgLabel.Position = UDim2.new(0, 8, 0, 26)
+    msgLabel.BackgroundTransparency = 1
+    msgLabel.Text = message
+    msgLabel.Font = Enum.Font.GothamMedium
+    msgLabel.TextSize = 10
+    msgLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+    msgLabel.TextXAlignment = Enum.TextXAlignment.Left
+    msgLabel.TextWrapped = true
+    msgLabel.Parent = frame
+    
+    TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+        Position = UDim2.new(1, -300, 0.85, 0)
+    }):Play()
+    
+    task.delay(duration, function()
+        TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+            Position = UDim2.new(1, 300, 0.85, 0)
+        }):Play()
+        task.wait(0.4)
+        gui:Destroy()
+    end)
+end
+
+-- ============================================================
+-- VALIDASI KEY — UBAH LOGIKA VALIDASI
+-- ============================================================
+local function validateKey(inputKey)
+    local cleanKey = string.upper(string.gsub(inputKey, "%s+", ""))
+    
+    for keyType, config in pairs(KEY_CONFIG) do
+        if cleanKey == config.key then
+            return true, keyType
+        end
+    end
+    
+    return false, "Key tidak valid"
+end
+
+-- ============================================================
+-- LISENSI MANAGER
+-- ============================================================
+local LicenseManager = {}
+
+function LicenseManager.activate(keyType)
+    local config = KEY_CONFIG[keyType]
+    if not config then
+        return false, "Tipe lisensi tidak dikenal"
+    end
+    
+    LicenseState.Valid = true
+    LicenseState.Type = keyType
+    LicenseState.ActivatedAt = os.time()
+    
+    if keyType == "PERMANENT" then
+        LicenseState.Expiry = math.huge
+    else
+        LicenseState.Expiry = os.time() + (config.duration * 86400)
+    end
+    
+    local storage = Instance.new("StringValue")
+    storage.Name = "LaserByKing_License"
+    storage.Value = string.format("%s|%d|%d", keyType, LicenseState.ActivatedAt, LicenseState.Expiry)
+    storage.Parent = LocalPlayer
+    
+    return true, config.notif
+end
+
+function LicenseManager.checkExpiry()
+    if not LicenseState.Valid then
+        return false, "Tidak ada lisensi"
+    end
+    
+    if LicenseState.Type == "PERMANENT" then
+        return true, "Permanent"
+    end
+    
+    local remaining = LicenseState.Expiry - os.time()
+    if remaining <= 0 then
+        LicenseState.Valid = false
+        return false, "Kadaluarsa"
+    end
+    
+    local days = math.floor(remaining / 86400)
+    return true, days .. " hari tersisa"
+end
+
+function LicenseManager.getStatus()
+    if not LicenseState.Valid then
+        return "❌ TIDAK AKTIF", Color3.fromRGB(200, 80, 80)
+    end
+    
+    local ok, msg = LicenseManager.checkExpiry()
+    if not ok then
+        LicenseState.Valid = false
+        return "❌ " .. msg, Color3.fromRGB(200, 80, 80)
+    end
+    
+    return "✅ " .. KEY_CONFIG[LicenseState.Type].label .. " — " .. msg, KEY_CONFIG[LicenseState.Type].color
+end
+
+local function loadLicenseFromStorage()
+    local storage = LocalPlayer:FindFirstChild("LaserByKing_License")
+    if not storage then return end
+    
+    local parts = string.split(storage.Value, "|")
+    if #parts ~= 3 then return end
+    
+    local keyType = parts[1]
+    local activatedAt = tonumber(parts[2])
+    local expiry = tonumber(parts[3])
+    
+    if keyType and activatedAt and expiry then
+        if keyType ~= "TRIAL" and keyType ~= "PERMANENT" then
+            return
+        end
+        
+        LicenseState.Valid = true
+        LicenseState.Type = keyType
+        LicenseState.ActivatedAt = activatedAt
+        LicenseState.Expiry = expiry
+        
+        if keyType ~= "PERMANENT" and expiry < os.time() then
+            LicenseState.Valid = false
+        end
+    end
+end
+
+-- ============================================================
+-- EXECUTE LOADSTRING
+-- ============================================================
+local function executeLoader()
+    showNotification("🚀 LOADING", "Mengunduh script...", 3, Color3.fromRGB(86, 125, 143))
+    
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(SCRIPT_URL))()
+    end)
+    
+    if success then
+        showNotification("✅ SUKSES", "Script dimuat!", 2, Color3.fromRGB(72, 160, 120))
+    else
+        showNotification("❌ GAGAL", "Error: " .. tostring(result), 4, Color3.fromRGB(200, 80, 80))
+    end
+end
+
+-- ============================================================
+-- CLOSE GUI
+-- ============================================================
+local function closeGUI(screenGui, mainFrame, callback)
+    if not screenGui or not mainFrame then
+        if callback then callback() end
+        return
+    end
+    
+    TweenService:Create(mainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 0, 0, 0),
+        Position = UDim2.new(0.5, 0, 0.5, 0)
+    }):Play()
+    
+    task.wait(0.3)
+    pcall(function() screenGui:Destroy() end)
+    if callback then callback() end
+end
+
+-- ============================================================
+-- CREATE MINI KEY GUI
+-- ============================================================
+local function createKeyGUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "LaserByKing_Key"
+    screenGui.ResetOnSpawn = false
+    screenGui.DisplayOrder = 999
+    screenGui.Parent = getCoreGui()
+    
+    -- MAIN FRAME — UKURAN KECIL
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 280, 0, 210)
+    mainFrame.Position = UDim2.new(0.5, -140, 0.5, -105)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Active = true
+    mainFrame.Draggable = true
+    mainFrame.Parent = screenGui
+    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+    
+    local mainStroke = Instance.new("UIStroke", mainFrame)
+    mainStroke.Color = Color3.fromRGB(86, 125, 143)
+    mainStroke.Thickness = 1.5
+    
+    -- HEADER — LEBIH TIPIS
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 40)
+    header.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    header.BorderSizePixel = 0
+    header.Parent = mainFrame
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
+    
+    local headerTitle = Instance.new("TextLabel")
+    headerTitle.Size = UDim2.new(1, -16, 0, 24)
+    headerTitle.Position = UDim2.new(0, 8, 0, 8)
+    headerTitle.BackgroundTransparency = 1
+    headerTitle.Text = "🔑 LASERBYKING"
+    headerTitle.Font = Enum.Font.GothamBold
+    headerTitle.TextSize = 14
+    headerTitle.TextColor3 = Color3.fromRGB(240, 240, 245)
+    headerTitle.TextXAlignment = Enum.TextXAlignment.Center
+    headerTitle.Parent = header
+    
+    -- STATUS — LEBIH KECIL
+    local statusFrame = Instance.new("Frame")
+    statusFrame.Size = UDim2.new(1, -16, 0, 32)
+    statusFrame.Position = UDim2.new(0, 8, 0, 48)
+    statusFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    statusFrame.BorderSizePixel = 0
+    statusFrame.Parent = mainFrame
+    Instance.new("UICorner", statusFrame).CornerRadius = UDim.new(0, 6)
+    
+    local statusText = Instance.new("TextLabel")
+    statusText.Size = UDim2.new(1, -8, 1, 0)
+    statusText.Position = UDim2.new(0, 4, 0, 0)
+    statusText.BackgroundTransparency = 1
+    statusText.Text = "⏳ MENUNGGU KEY"
+    statusText.Font = Enum.Font.GothamBold
+    statusText.TextSize = 11
+    statusText.TextColor3 = Color3.fromRGB(200, 200, 210)
+    statusText.TextXAlignment = Enum.TextXAlignment.Center
+    statusText.Parent = statusFrame
+    
+    -- INPUT — LEBIH KECIL
+    local inputBg = Instance.new("Frame")
+    inputBg.Size = UDim2.new(1, -16, 0, 34)
+    inputBg.Position = UDim2.new(0, 8, 0, 88)
+    inputBg.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+    inputBg.BorderSizePixel = 0
+    inputBg.Parent = mainFrame
+    Instance.new("UICorner", inputBg).CornerRadius = UDim.new(0, 6)
+    
+    local inputBox = Instance.new("TextBox")
+    inputBox.Size = UDim2.new(1, -16, 1, 0)
+    inputBox.Position = UDim2.new(0, 8, 0, 0)
+    inputBox.BackgroundTransparency = 1
+    inputBox.PlaceholderText = "MASUKKAN KEY"
+    inputBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 115)
+    inputBox.Text = ""
+    inputBox.TextColor3 = Color3.fromRGB(240, 240, 245)
+    inputBox.Font = Enum.Font.GothamBold
+    inputBox.TextSize = 13
+    inputBox.ClearTextOnFocus = false
+    inputBox.Parent = inputBg
+    
+    -- ACTIVATE BUTTON — LEBIH KECIL
+    local activateBtn = Instance.new("TextButton")
+    activateBtn.Size = UDim2.new(1, -16, 0, 34)
+    activateBtn.Position = UDim2.new(0, 8, 0, 130)
+    activateBtn.BackgroundColor3 = Color3.fromRGB(72, 187, 204)
+    activateBtn.BorderSizePixel = 0
+    activateBtn.Text = "🔓 AKTIFKAN"
+    activateBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    activateBtn.Font = Enum.Font.GothamBold
+    activateBtn.TextSize = 12
+    activateBtn.Parent = mainFrame
+    Instance.new("UICorner", activateBtn).CornerRadius = UDim.new(0, 6)
+    
+    -- FOOTER — LEBIH TIPIS
+    local footer = Instance.new("Frame")
+    footer.Size = UDim2.new(1, -16, 0, 22)
+    footer.Position = UDim2.new(0, 8, 0, 180)
+    footer.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    footer.BorderSizePixel = 0
+    footer.Parent = mainFrame
+    Instance.new("UICorner", footer).CornerRadius = UDim.new(0, 6)
+    
+    local footerText = Instance.new("TextLabel")
+    footerText.Size = UDim2.new(1, 0, 1, 0)
+    footerText.BackgroundTransparency = 1
+    footerText.Text = "YTTA v1.0"
+    footerText.Font = Enum.Font.GothamMedium
+    footerText.TextSize = 8
+    footerText.TextColor3 = Color3.fromRGB(80, 80, 95)
+    footerText.TextXAlignment = Enum.TextXAlignment.Center
+    footerText.Parent = footer
+    
+    -- ============================================================
+    -- INTERACTIONS
+    -- ============================================================
+    local function updateStatus()
+        local text, color = LicenseManager.getStatus()
+        statusText.Text = text
+        statusText.TextColor3 = color
+        
+        local stroke = statusFrame:FindFirstChild("UIStroke")
+        if stroke then
+            stroke.Color = color
+        else
+            local newStroke = Instance.new("UIStroke", statusFrame)
+            newStroke.Color = color
+            newStroke.Thickness = 1.5
+        end
+    end
+    
+    -- ACTIVATE → AUTO CLOSE + AUTO EXECUTE
+    activateBtn.MouseButton1Click:Connect(function()
+        local key = string.upper(string.gsub(inputBox.Text, "%s+", ""))
+        if key == "" then
+            showNotification("⚠️", "Masukkan key!", 2, Color3.fromRGB(200, 160, 80))
+            return
+        end
+        
+        local isValid, keyType = validateKey(key)
+        if not isValid then
+            showNotification("❌", keyType, 2, Color3.fromRGB(200, 80, 80))
+            return
+        end
+        
+        local success, notifMsg = LicenseManager.activate(keyType)
+        if success then
+            showNotification("🔑 KEY VALID", notifMsg, 3, KEY_CONFIG[keyType].color)
+            inputBox.Text = ""
+            updateStatus()
+            
+            TweenService:Create(activateBtn, TweenInfo.new(0.2), {
+                BackgroundColor3 = Color3.fromRGB(72, 160, 120)
+            }):Play()
+            
+            task.wait(0.4)
+            closeGUI(screenGui, mainFrame, function()
+                executeLoader()
+            end)
+        else
+            showNotification("❌", notifMsg, 2, Color3.fromRGB(200, 80, 80))
+        end
+    end)
+    
+    inputBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            activateBtn.MouseButton1Click:Fire()
+        end
+    end)
+    
+    updateStatus()
+    
+    task.spawn(function()
+        while screenGui and screenGui.Parent do
+            task.wait(60)
+            updateStatus()
+        end
+    end)
+    
+    return screenGui
+end
+
+-- ============================================================
+-- LOADING SCREEN — MINI
+-- ============================================================
+local function showLoading()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "MiniLoading"
+    gui.ResetOnSpawn = false
+    gui.DisplayOrder = 2147483647
+    gui.Parent = getCoreGui()
+    
+    local cover = Instance.new("Frame")
+    cover.Size = UDim2.new(1, 0, 1, 0)
+    cover.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
+    cover.BorderSizePixel = 0
+    cover.Parent = gui
+    
+    local center = Instance.new("Frame")
+    center.Size = UDim2.new(0, 280, 0, 150)
+    center.Position = UDim2.new(0.5, -140, 0.5, -75)
+    center.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
+    center.BorderSizePixel = 0
+    center.Parent = cover
+    Instance.new("UICorner", center).CornerRadius = UDim.new(0, 10)
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.Position = UDim2.new(0, 0, 0, 16)
+    title.BackgroundTransparency = 1
+    title.Text = "🔑 LASERBYKING"
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 18
+    title.TextColor3 = Color3.fromRGB(240, 240, 245)
+    title.TextXAlignment = Enum.TextXAlignment.Center
+    title.Parent = center
+    
+    local sub = Instance.new("TextLabel")
+    sub.Size = UDim2.new(1, 0, 0, 16)
+    sub.Position = UDim2.new(0, 0, 0, 50)
+    sub.BackgroundTransparency = 1
+    sub.Text = "Initializing..."
+    sub.Font = Enum.Font.GothamMedium
+    sub.TextSize = 10
+    sub.TextColor3 = Color3.fromRGB(150, 150, 165)
+    sub.TextXAlignment = Enum.TextXAlignment.Center
+    sub.Parent = center
+    
+    local barBg = Instance.new("Frame")
+    barBg.Size = UDim2.new(0, 180, 0, 4)
+    barBg.Position = UDim2.new(0.5, -90, 0, 80)
+    barBg.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    barBg.BorderSizePixel = 0
+    barBg.Parent = center
+    Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
+    
+    local barFill = Instance.new("Frame")
+    barFill.Size = UDim2.new(0, 0, 1, 0)
+    barFill.BackgroundColor3 = Color3.fromRGB(72, 187, 204)
+    barFill.BorderSizePixel = 0
+    barFill.Parent = barBg
+    Instance.new("UICorner", barFill).CornerRadius = UDim.new(1, 0)
+    
+    TweenService:Create(barFill, TweenInfo.new(1, Enum.EasingStyle.Quad), {
+        Size = UDim2.new(1, 0, 1, 0)
+    }):Play()
+    
+    task.wait(1.4)
+    
+    TweenService:Create(cover, TweenInfo.new(0.3), {
+        BackgroundTransparency = 1
+    }):Play()
+    task.wait(0.4)
+    gui:Destroy()
+end
+
+-- ============================================================
+-- MAIN
+-- ============================================================
+local function main()
+    print("=== LASERBYKING MINI KEY v1 ===")
+    print("Owner: Mr. Kholis")
+    print("Keys: 7707 (Trial) | 7777 (Permanent)")
+    
+    loadLicenseFromStorage()
+    showLoading()
+    
+    task.wait(0.2)
+    createKeyGUI()
+    
+    task.wait(0.5)
+    local statusText, color = LicenseManager.getStatus()
+    showNotification("📋 STATUS", statusText, 2, color)
+end
+
+main()
